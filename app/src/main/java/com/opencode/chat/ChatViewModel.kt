@@ -57,7 +57,28 @@ class ChatViewModel : ViewModel() {
                         else -> null
                     }
                     if (text != null) {
-                        messages.add(ChatMessage(UUID.randomUUID().toString(), "assistant", text))
+                        val agent = json.get("agent")?.asString
+                            ?: json.get("mode")?.asString
+                        val model = json.get("modelID")?.asString
+                            ?: json.get("model")?.asString
+                        val agentLabel = listOfNotNull(agent, model)
+                            .takeIf { it.isNotEmpty() }
+                            ?.joinToString(" · ")
+                        val thoughtMs = json.get("thinkingMs")?.asLong
+                            ?: json.get("reasoningMs")?.asLong
+                        val durationMs = json.get("durationMs")?.asLong
+                            ?: json.get("elapsedMs")?.asLong
+
+                        messages.add(
+                            ChatMessage(
+                                id = UUID.randomUUID().toString(),
+                                role = "assistant",
+                                text = text,
+                                agentLabel = agentLabel,
+                                thoughtMs = thoughtMs,
+                                durationMs = durationMs
+                            )
+                        )
                     }
                 } catch (_: Exception) {
                     // حدث غير متوقع الشكل — راجع مخطط /event الفعلي في /doc وعدّل هنا

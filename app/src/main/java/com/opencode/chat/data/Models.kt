@@ -19,5 +19,8 @@ data class SendMessageRequest(
 data class ChatMessage(
     val id: String,
     val role: String,
-    val text: String
+    val text: String,
+    val agentLabel: String? = null,
+    val thoughtMs: Long? = null,
+    val durationMs: Long? = null
 )

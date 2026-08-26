@@ -19,7 +19,7 @@ interface OpenCodeService {
     suspend fun createSession(): CreateSessionResponse
 
     @POST("session/{id}/message")
-    suspend fun sendMessage(@Path("id") id: String, @Body body: SendMessageRequest)
+    suspend fun sendMessage(@Path("id") id: String, @Body body: SendMessageRequest): MessageResponse
 }
 
 /**

@@ -37,57 +37,12 @@ class ChatViewModel : ViewModel() {
                 val session = newClient.service.createSession()
                 sessionId.value = session.id
                 isConnected.value = true
-                startListening(newClient)
             } catch (e: Exception) {
                 connectionError.value = e.message ?: "فشل الاتصال بالخادم"
             } finally {
                 isConnecting.value = false
             }
         }
-    }
-
-    private fun startListening(client: OpenCodeClient) {
-        eventSource = client.listenEvents(
-            onEvent = { data ->
-                try {
-                    val json = JsonParser.parseString(data).asJsonObject
-                    val text = when {
-                        json.has("text") -> json.get("text").asString
-                        json.has("content") -> json.get("content").asString
-                        else -> null
-                    }
-                    if (text != null) {
-                        val agent = json.get("agent")?.asString
-                            ?: json.get("mode")?.asString
-                        val model = json.get("modelID")?.asString
-                            ?: json.get("model")?.asString
-                        val agentLabel = listOfNotNull(agent, model)
-                            .takeIf { it.isNotEmpty() }
-                            ?.joinToString(" · ")
-                        val thoughtMs = json.get("thinkingMs")?.asLong
-                            ?: json.get("reasoningMs")?.asLong
-                        val durationMs = json.get("durationMs")?.asLong
-                            ?: json.get("elapsedMs")?.asLong
-
-                        messages.add(
-                            ChatMessage(
-                                id = UUID.randomUUID().toString(),
-                                role = "assistant",
-                                text = text,
-                                agentLabel = agentLabel,
-                                thoughtMs = thoughtMs,
-                                durationMs = durationMs
-                            )
-                        )
-                    }
-                } catch (_: Exception) {
-                    // حدث غير متوقع الشكل — راجع مخطط /event الفعلي في /doc وعدّل هنا
-                }
-            },
-            onError = { t ->
-                connectionError.value = "انقطع الاتصال بالخادم: ${t?.message}"
-            }
-        )
     }
 
     fun sendMessage(text: String) {
@@ -100,10 +55,33 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                currentClient.service.sendMessage(
+                // ملاحظة: هذا الاستدعاء يظل منتظرًا حتى يكمل الوكيل رده الكامل،
+                // لأن /session/:id/message نقطة مزامنة (synchronous) وليست بثًا لحظيًا.
+                val response = currentClient.service.sendMessage(
                     currentSession,
                     SendMessageRequest(parts = listOf(MessagePart(text = text)))
                 )
+                val replyText = response.parts
+                    .asSequence()
+                    .filter { it.type == "text" && !it.text.isNullOrBlank() }
+                    .mapNotNull { it.text }
+                    .joinToString("\n")
+
+                if (replyText.isNotBlank()) {
+                    val agentLabel = listOfNotNull(response.info?.providerID, response.info?.modelID)
+                        .takeIf { it.isNotEmpty() }
+                        ?.joinToString(" · ")
+                    messages.add(
+                        ChatMessage(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            text = replyText,
+                            agentLabel = agentLabel
+                        )
+                    )
+                } else {
+                    connectionError.value = "وصل رد من الخادم لكن بدون نص واضح — راجع /doc لمطابقة شكل الأجزاء (parts)"
+                }
             } catch (e: Exception) {
                 connectionError.value = "فشل إرسال الرسالة: ${e.message}"
             } finally {

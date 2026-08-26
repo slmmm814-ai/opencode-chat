@@ -34,11 +34,19 @@ class OpenCodeClient(baseUrl: String, private val password: String?) {
 
     private val normalizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
 
+    private fun basicAuthValue(): String? {
+        if (password.isNullOrBlank()) return null
+        val credentials = "opencode:$password"
+        val encoded = android.util.Base64.encodeToString(
+            credentials.toByteArray(Charsets.UTF_8),
+            android.util.Base64.NO_WRAP
+        )
+        return "Basic $encoded"
+    }
+
     private val authInterceptor = Interceptor { chain ->
         val builder = chain.request().newBuilder()
-        if (!password.isNullOrBlank()) {
-            builder.header("Authorization", "Bearer $password")
-        }
+        basicAuthValue()?.let { builder.header("Authorization", it) }
         chain.proceed(builder.build())
     }
 
@@ -59,7 +67,7 @@ class OpenCodeClient(baseUrl: String, private val password: String?) {
     fun listenEvents(onEvent: (String) -> Unit, onError: (Throwable?) -> Unit): EventSource {
         val request = Request.Builder()
             .url("${normalizedBaseUrl}event")
-            .apply { if (!password.isNullOrBlank()) header("Authorization", "Bearer $password") }
+            .apply { basicAuthValue()?.let { header("Authorization", it) } }
             .build()
 
         val listener = object : EventSourceListener() {
